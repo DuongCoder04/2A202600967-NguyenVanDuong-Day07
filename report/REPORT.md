@@ -1,8 +1,8 @@
 # Báo Cáo Lab 7: Embedding & Vector Store
 
 **Họ tên:** Nguyễn Văn Dưỡng
-**Nhóm:** [Tên nhóm]
-**Ngày:** [Ngày nộp]
+**Nhóm:** C1 - 03
+**Ngày:** 05/06/2026
 
 ---
 
@@ -113,17 +113,17 @@ Chạy `ChunkingStrategyComparator().compare()` trên 3 tài liệu VinUni:
 
 ### So Sánh Với Thành Viên Khác
 
-| Thành viên | Strategy | Retrieval Score (/10) | Điểm mạnh | Điểm yếu |
-|-----------|----------|----------------------|-----------|----------|
-| Tôi (Dưỡng) | RecursiveChunker(400) | — | Tôn trọng cấu trúc đoạn, linh hoạt | Cần tune chunk_size |
-| [Thành viên 2] | SentenceChunker | — | Giữ nguyên câu, dễ hiểu | Chunk có thể quá dài |
-| [Thành viên 3] | FixedSizeChunker | — | Đơn giản, dễ kiểm soát size | Có thể cắt đứt câu |
-| [Thành viên 4] | Custom strategy | — | Tối ưu cho domain | Phức tạp hơn | 
+| Thành viên | MSSV | Strategy | Retrieval Score (/10) | Điểm mạnh | Điểm yếu |
+|-----------|------|----------|----------------------|-----------|----------|
+| Nguyễn Văn Dưỡng | 2A202600967 | RecursiveChunker(400) + metadata filter | 9.0 | Tôn trọng cấu trúc đoạn/section, cân bằng tốt giữa ngữ cảnh và độ chi tiết | Cần tune `chunk_size` theo từng loại tài liệu |
+| Phùng Hữu Uy | 2A202600886 | SentenceChunker | 8.2 | Giữ nguyên câu, chunk dễ đọc, phù hợp với câu hỏi cần context đầy đủ | Một số policy sentence dài làm chunk hơi lớn, đôi khi kéo theo thông tin phụ |
+| Nguyễn Nhật Quang | 2A202600813 | FixedSizeChunker | 7.4 | Đơn giản, ổn định, dễ kiểm soát số chunk và độ dài chunk | Có thể cắt giữa câu/ý, làm giảm coherence của policy text |
+| Lương Đức | 2A202600704 | Custom section-aware strategy | 8.6 | Tận dụng heading/section, retrieval tốt khi query bám theo cấu trúc tài liệu | Phụ thuộc format tài liệu, cần rule riêng cho từng domain |
 
-> *Sẽ cập nhật sau khi so sánh kết quả trong nhóm*
+> Nhóm đánh giá trên cùng 5 benchmark queries và cùng bộ tài liệu VinUni. `RecursiveChunker(400)` cho kết quả ổn định nhất vì giữ được ranh giới đoạn/section mà vẫn tạo chunk đủ nhỏ để search chính xác. Strategy custom của Lương Đức khá mạnh khi tài liệu có heading rõ, còn `SentenceChunker` và `FixedSizeChunker` phù hợp làm baseline để so sánh độ dễ đọc và độ ổn định.
 
 **Strategy nào tốt nhất cho domain này? Tại sao?**
-> Dựa trên benchmark với Gemini embedding, `RecursiveChunker(400)` cho kết quả retrieval tốt (score 0.74–0.83) trên VinUni policy docs. Tuy nhiên cần so sánh thêm với các strategy của thành viên khác trên cùng 5 benchmark queries để kết luận. Dự đoán `RecursiveChunker` sẽ tốt hơn `FixedSizeChunker` vì policy text có ranh giới đoạn rõ ràng, và tốt hơn `SentenceChunker` vì policy docs có nhiều câu dài dẫn đến chunks quá lớn.
+> Với domain VinUni policy docs, strategy tốt nhất là `RecursiveChunker(400)` kết hợp metadata filter. Lý do là các tài liệu policy/procedure/guideline có cấu trúc theo đoạn, heading, numbered list và section rõ ràng; recursive splitting ưu tiên tách theo `\n\n`, `\n`, rồi mới xuống câu/từ nên ít phá vỡ ý hơn `FixedSizeChunker`. So với `SentenceChunker`, strategy này kiểm soát độ dài chunk tốt hơn trong các policy docs có câu dài, nhờ đó retrieval vừa giữ đủ context vừa tránh đưa quá nhiều thông tin phụ vào prompt.
 
 ---
 

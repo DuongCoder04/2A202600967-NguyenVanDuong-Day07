@@ -5,6 +5,7 @@ Phase 2: Run 5 benchmark queries with RecursiveChunker strategy (Duong's persona
 Usage:
     python3 benchmark.py                          # mock embedder (default)
     EMBEDDING_PROVIDER=local python3 benchmark.py # sentence-transformers
+    EMBEDDING_PROVIDER=gemini python3 benchmark.py # Gemini from .env
 """
 from __future__ import annotations
 
@@ -47,7 +48,7 @@ def _get_llm_fn():
     if api_key and api_key != "your-gemini-api-key-here":
         try:
             from google import genai
-            model = os.getenv("GEMINI_LLM_MODEL", "gemini-2.0-flash")
+            model = os.getenv("GEMINI_LLM_MODEL", "gemini-2.5-flash")
             client = genai.Client(api_key=api_key)
 
             def gemini_llm(prompt: str) -> str:

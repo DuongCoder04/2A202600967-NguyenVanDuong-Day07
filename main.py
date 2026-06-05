@@ -7,10 +7,12 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from src.agent import KnowledgeBaseAgent
+from src.chunking import RecursiveChunker
 from src.embeddings import (
     EMBEDDING_PROVIDER_ENV,
     LOCAL_EMBEDDING_MODEL,
     OPENAI_EMBEDDING_MODEL,
+    GeminiEmbedder,
     LocalEmbedder,
     OpenAIEmbedder,
     _mock_embed,
@@ -18,14 +20,20 @@ from src.embeddings import (
 from src.models import Document
 from src.store import EmbeddingStore
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
 SAMPLE_FILES = [
-    "data/python_intro.txt",
-    "data/vector_store_notes.md",
-    "data/rag_system_design.md",
-    "data/customer_support_playbook.txt",
-    "data/chunking_experiment_report.md",
-    "data/vi_retrieval_notes.md",
+    "data/20K-AI-Handbook-ver2.0-da-nen.txt",
+    "data/GDL-CHS-005-V2.0_Vietnamese-Language-Program-for-International-Students_4.5.2026.txt",
+    "data/GDL-REG-002-V4.1_ENGLISH-LANGUAGE-REQUIREMENTS-FOR-UNDERGRADUATE-ADMISSIONS_4.5.2026.txt",
+    "data/POL-AQA-001-V4.0_Course-Evaluation-Policy_26.12.2025.txt",
+    "data/PRC-AQA-002_Student-Grade-Appeal-Procedures_21.01.2026.txt",
 ]
+
+DEFAULT_CHUNK_SIZE = 800
 
 
 def load_documents_from_files(file_paths: list[str]) -> list[Document]:
@@ -62,6 +70,45 @@ def demo_llm(prompt: str) -> str:
     return f"[DEMO LLM] Generated answer from prompt preview: {preview}..."
 
 
+def get_llm_fn():
+    """Return a Gemini-backed LLM function when GEMINI_API_KEY is configured."""
+    api_key = os.getenv("GEMINI_API_KEY", "")
+    if api_key and api_key != "your-gemini-api-key-here":
+        try:
+            from google import genai
+
+            model = os.getenv("GEMINI_LLM_MODEL", "gemini-2.5-flash")
+            client = genai.Client(api_key=api_key)
+
+            def gemini_llm(prompt: str) -> str:
+                response = client.models.generate_content(model=model, contents=prompt)
+                return response.text or ""
+
+            gemini_llm._backend_name = f"gemini/{model}"  # type: ignore[attr-defined]
+            return gemini_llm
+        except Exception as exc:
+            print(f"Gemini LLM unavailable ({exc}); using demo LLM.")
+
+    demo_llm._backend_name = "demo LLM"  # type: ignore[attr-defined]
+    return demo_llm
+
+
+def chunk_documents(documents: list[Document], chunk_size: int = DEFAULT_CHUNK_SIZE) -> list[Document]:
+    """Split loaded files into retrievable chunks while preserving metadata."""
+    chunker = RecursiveChunker(chunk_size=chunk_size)
+    chunks: list[Document] = []
+    for doc in documents:
+        for index, content in enumerate(chunker.chunk(doc.content)):
+            chunks.append(
+                Document(
+                    id=f"{doc.id}_chunk{index:03d}",
+                    content=content,
+                    metadata={**doc.metadata, "doc_id": doc.id, "chunk_index": index},
+                )
+            )
+    return chunks
+
+
 def run_manual_demo(question: str | None = None, sample_files: list[str] | None = None) -> int:
     files = sample_files or SAMPLE_FILES
     query = question or "Summarize the key information from the loaded files."
@@ -90,6 +137,11 @@ def run_manual_demo(question: str | None = None, sample_files: list[str] | None 
             embedder = LocalEmbedder(model_name=os.getenv("LOCAL_EMBEDDING_MODEL", LOCAL_EMBEDDING_MODEL))
         except Exception:
             embedder = _mock_embed
+    elif provider == "gemini":
+        try:
+            embedder = GeminiEmbedder()
+        except Exception:
+            embedder = _mock_embed
     elif provider == "openai":
         try:
             embedder = OpenAIEmbedder(model_name=os.getenv("OPENAI_EMBEDDING_MODEL", OPENAI_EMBEDDING_MODEL))
@@ -100,10 +152,11 @@ def run_manual_demo(question: str | None = None, sample_files: list[str] | None 
 
     print(f"\nEmbedding backend: {getattr(embedder, '_backend_name', embedder.__class__.__name__)}")
 
+    chunks = chunk_documents(docs)
     store = EmbeddingStore(collection_name="manual_test_store", embedding_fn=embedder)
-    store.add_documents(docs)
+    store.add_documents(chunks)
 
-    print(f"\nStored {store.get_collection_size()} documents in EmbeddingStore")
+    print(f"\nStored {store.get_collection_size()} chunks in EmbeddingStore")
     print("\n=== EmbeddingStore Search Test ===")
     print(f"Query: {query}")
     search_results = store.search(query, top_k=3)
@@ -112,7 +165,9 @@ def run_manual_demo(question: str | None = None, sample_files: list[str] | None 
         print(f"   content preview: {result['content'][:120].replace(chr(10), ' ')}...")
 
     print("\n=== KnowledgeBaseAgent Test ===")
-    agent = KnowledgeBaseAgent(store=store, llm_fn=demo_llm)
+    llm_fn = get_llm_fn()
+    print(f"LLM backend: {getattr(llm_fn, '_backend_name', llm_fn.__class__.__name__)}")
+    agent = KnowledgeBaseAgent(store=store, llm_fn=llm_fn)
     print(f"Question: {query}")
     print("Agent answer:")
     print(agent.answer(query, top_k=3))

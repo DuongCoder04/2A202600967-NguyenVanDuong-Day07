@@ -1,5 +1,6 @@
 pytest>=7.0
 python-dotenv>=1.0
+google-genai>=1.0
 
 # Optional manual-demo extras
 # Install local embedder support with:
@@ -7,7 +8,7 @@ python-dotenv>=1.0
 # Install OpenAI embedder support with:
 #   pip install openai
 # Install both optional embedders with:
-#   pip install openai sentence-transformers
+#   pip install openai sentence-transformers google-genai
 # sentence-transformers>=3.0
 # openai>=1.0
 

@@ -8,6 +8,7 @@ from .chunking import (
 )
 from .embeddings import (
     EMBEDDING_PROVIDER_ENV,
+    GeminiEmbedder,
     LOCAL_EMBEDDING_MODEL,
     OPENAI_EMBEDDING_MODEL,
     LocalEmbedder,
@@ -30,6 +31,7 @@ __all__ = [
     "MockEmbedder",
     "LocalEmbedder",
     "OpenAIEmbedder",
+    "GeminiEmbedder",
     "_mock_embed",
     "LOCAL_EMBEDDING_MODEL",
     "OPENAI_EMBEDDING_MODEL",
