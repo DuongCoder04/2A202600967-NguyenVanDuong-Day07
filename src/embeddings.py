@@ -59,3 +59,42 @@ class OpenAIEmbedder:
 
 
 _mock_embed = MockEmbedder()
+
+
+class GeminiEmbedder:
+    """Google Gemini embedding API-backed embedder.
+    
+    Reads config from environment:
+        GEMINI_API_KEY          — required
+        GEMINI_EMBEDDING_MODEL  — default: gemini-embedding-2
+    """
+
+    def __init__(self) -> None:
+        import os
+        from google import genai
+
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key or api_key == "your-gemini-api-key-here":
+            raise ValueError("GEMINI_API_KEY not set in environment")
+        model_name = os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-2")
+        self.client = genai.Client(api_key=api_key)
+        self.model_name = model_name
+        self._backend_name = f"gemini/{model_name}"
+
+    def __call__(self, text: str) -> list[float]:
+        import time
+        for attempt in range(3):
+            try:
+                result = self.client.models.embed_content(
+                    model=self.model_name,
+                    contents=text,
+                )
+                return list(result.embeddings[0].values)
+            except Exception as e:
+                if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                    wait = 10 * (attempt + 1)
+                    print(f"  [rate limit] waiting {wait}s...")
+                    time.sleep(wait)
+                else:
+                    raise
+        raise RuntimeError("GeminiEmbedder: max retries exceeded")

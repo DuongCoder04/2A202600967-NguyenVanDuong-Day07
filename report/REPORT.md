@@ -46,27 +46,29 @@
 
 ### Domain & Lý Do Chọn
 
-**Domain:** [ví dụ: Customer support FAQ, Vietnamese law, cooking recipes, ...]
+**Domain:** VinUni Official Policies & Regulations
 
 **Tại sao nhóm chọn domain này?**
-> *Viết 2-3 câu:*
+> Nhóm chọn các tài liệu quy định chính thức của VinUniversity vì đây là domain có cấu trúc rõ ràng (policy, procedure, guideline), câu hỏi có thể verify trực tiếp từ văn bản, và metadata phân loại tự nhiên theo category. Đây cũng là thông tin thực tế hữu ích cho sinh viên VinUni, giúp bài benchmark có ý nghĩa thực tiễn cao.
 
 ### Data Inventory
 
 | # | Tên tài liệu | Nguồn | Số ký tự | Metadata đã gán |
 |---|--------------|-------|----------|-----------------|
-| 1 | | | | |
-| 2 | | | | |
-| 3 | | | | |
-| 4 | | | | |
-| 5 | | | | |
+| 1 | AI Talent Training Program Handbook (Sổ tay học viên AI) | VinUni / Vingroup (20K-AI-Handbook-ver2.0) | 18,650 | category: program, lang: vi |
+| 2 | Vietnamese Language Program for International Students | VinUni GDL-CHS-005-V2.0 | 6,045 | category: language, lang: en |
+| 3 | English Language Requirements for Undergraduate Admissions | VinUni GDL-REG-002-V4.1 | 13,632 | category: admissions, lang: en |
+| 4 | Course Evaluation Policy | VinUni POL-AQA-001-V4.0 | 15,814 | category: academic, lang: en |
+| 5 | Student Grade Appeal Procedures | VinUni PRC-AQA-002-V2.0 | 6,249 | category: academic, lang: en |
 
 ### Metadata Schema
 
 | Trường metadata | Kiểu | Ví dụ giá trị | Tại sao hữu ích cho retrieval? |
 |----------------|------|---------------|-------------------------------|
-| | | | |
-| | | | |
+| `category` | string | `academic`, `admissions`, `language`, `program` | Cho phép filter theo loại tài liệu, giúp thu hẹp search space khi query rõ ngữ cảnh |
+| `lang` | string | `en`, `vi` | Lọc theo ngôn ngữ, tránh trả về chunk tiếng Việt khi query bằng tiếng Anh |
+| `doc_title` | string | "Course Evaluation Policy" | Giúp trace back kết quả về tài liệu gốc |
+| `source` | string | `POL-AQA-001-V4.0` | Reference number để verify nguồn |
 
 ---
 
@@ -74,46 +76,54 @@
 
 ### Baseline Analysis
 
-Chạy `ChunkingStrategyComparator().compare()` trên 2-3 tài liệu:
+Chạy `ChunkingStrategyComparator().compare()` trên 3 tài liệu VinUni:
 
 | Tài liệu | Strategy | Chunk Count | Avg Length | Preserves Context? |
 |-----------|----------|-------------|------------|-------------------|
-| | FixedSizeChunker (`fixed_size`) | | | |
-| | SentenceChunker (`by_sentences`) | | | |
-| | RecursiveChunker (`recursive`) | | | |
+| grade_appeal (6,249 chars) | FixedSizeChunker (`fixed_size`) | 18 | 394.4 | Trung bình — có thể cắt giữa câu |
+| grade_appeal (6,249 chars) | SentenceChunker (`by_sentences`) | 12 | 516.8 | Tốt — giữ nguyên câu |
+| grade_appeal (6,249 chars) | RecursiveChunker (`recursive`) | 18 | 345.8 | Tốt — ưu tiên tách theo đoạn |
+| course_eval (15,814 chars) | FixedSizeChunker (`fixed_size`) | 46 | 392.7 | Trung bình |
+| course_eval (15,814 chars) | SentenceChunker (`by_sentences`) | 53 | 295.0 | Tốt — nhiều chunk nhỏ hơn |
+| course_eval (15,814 chars) | RecursiveChunker (`recursive`) | 46 | 342.5 | Tốt |
+| eng_req (13,632 chars) | FixedSizeChunker (`fixed_size`) | 39 | 398.3 | Trung bình |
+| eng_req (13,632 chars) | SentenceChunker (`by_sentences`) | 31 | 435.7 | Tốt — chunks lớn hơn |
+| eng_req (13,632 chars) | RecursiveChunker (`recursive`) | 37 | 367.2 | Tốt |
 
 ### Strategy Của Tôi
 
-**Loại:** [FixedSizeChunker / SentenceChunker / RecursiveChunker / custom strategy]
+**Loại:** RecursiveChunker (`chunk_size=400`)
 
 **Mô tả cách hoạt động:**
-> *Viết 3-4 câu: strategy chunk thế nào? Dựa trên dấu hiệu gì?*
+> `RecursiveChunker` tách text theo danh sách separator ưu tiên `["\n\n", "\n", ". ", " ", ""]` — thử tách bằng separator có ngữ nghĩa cao nhất trước (đoạn văn `\n\n`), nếu mảnh vẫn quá dài thì đệ quy xuống separator tiếp theo (dòng, câu, từ, ký tự). Sau khi có các mảnh nhỏ, thuật toán **greedy packing** gom các mảnh liền kề lại miễn tổng độ dài ≤ `chunk_size`, tránh tạo ra quá nhiều chunks cực nhỏ.
 
 **Tại sao tôi chọn strategy này cho domain nhóm?**
-> *Viết 2-3 câu: domain có pattern gì mà strategy khai thác?*
-
-**Code snippet (nếu custom):**
-```python
-# Paste implementation here
-```
+> Các tài liệu quy định của VinUni có cấu trúc theo đoạn và section rõ ràng (numbered lists, headers, procedure steps). `RecursiveChunker` khai thác được cấu trúc này bằng cách ưu tiên tách theo `\n\n` (ranh giới đoạn/section), giúp mỗi chunk giữ được một ý hoàn chỉnh thay vì bị cắt giữa một quy định. So với `FixedSizeChunker`, chunks ít bị cắt đứt giữa câu hơn; so với `SentenceChunker`, chunk count nhỏ hơn và avg length phù hợp hơn với policy text có câu dài.
 
 ### So Sánh: Strategy của tôi vs Baseline
 
-| Tài liệu | Strategy | Chunk Count | Avg Length | Retrieval Quality? |
-|-----------|----------|-------------|------------|--------------------|
-| | best baseline | | | |
-| | **của tôi** | | | |
+| Tài liệu | Strategy | Chunk Count | Avg Length | Retrieval Quality |
+|-----------|----------|-------------|------------|-------------------|
+| grade_appeal | SentenceChunker (best baseline) | 12 | 516.8 | Tốt — chunks lớn, giữ ngữ cảnh |
+| grade_appeal | **RecursiveChunker (của tôi)** | **18** | **345.8** | **Tốt — tách theo đoạn, granular hơn** |
+| course_eval | FixedSizeChunker (best baseline) | 46 | 392.7 | Trung bình |
+| course_eval | **RecursiveChunker (của tôi)** | **46** | **342.5** | **Tốt — cùng count nhưng chunk gọn hơn** |
+| eng_req | SentenceChunker (best baseline) | 31 | 435.7 | Tốt |
+| eng_req | **RecursiveChunker (của tôi)** | **37** | **367.2** | **Tốt — cân bằng giữa granularity và context** |
 
 ### So Sánh Với Thành Viên Khác
 
 | Thành viên | Strategy | Retrieval Score (/10) | Điểm mạnh | Điểm yếu |
 |-----------|----------|----------------------|-----------|----------|
-| Tôi | | | | |
-| [Tên] | | | | |
-| [Tên] | | | | |
+| Tôi (Dưỡng) | RecursiveChunker(400) | — | Tôn trọng cấu trúc đoạn, linh hoạt | Cần tune chunk_size |
+| [Thành viên 2] | SentenceChunker | — | Giữ nguyên câu, dễ hiểu | Chunk có thể quá dài |
+| [Thành viên 3] | FixedSizeChunker | — | Đơn giản, dễ kiểm soát size | Có thể cắt đứt câu |
+| [Thành viên 4] | Custom strategy | — | Tối ưu cho domain | Phức tạp hơn | 
+
+> *Sẽ cập nhật sau khi so sánh kết quả trong nhóm*
 
 **Strategy nào tốt nhất cho domain này? Tại sao?**
-> *Viết 2-3 câu:*
+> Dựa trên benchmark với Gemini embedding, `RecursiveChunker(400)` cho kết quả retrieval tốt (score 0.74–0.83) trên VinUni policy docs. Tuy nhiên cần so sánh thêm với các strategy của thành viên khác trên cùng 5 benchmark queries để kết luận. Dự đoán `RecursiveChunker` sẽ tốt hơn `FixedSizeChunker` vì policy text có ranh giới đoạn rõ ràng, và tốt hơn `SentenceChunker` vì policy docs có nhiều câu dài dẫn đến chunks quá lớn.
 
 ---
 
@@ -212,29 +222,32 @@ tests/test_solution.py::TestEmbeddingStoreDeleteDocument::test_delete_returns_tr
 
 ## 6. Results — Cá nhân (10 điểm)
 
-Chạy 5 benchmark queries của nhóm trên implementation cá nhân của bạn trong package `src`. **5 queries phải trùng với các thành viên cùng nhóm.**
+Chạy 5 benchmark queries của nhóm trên implementation cá nhân với `RecursiveChunker(chunk_size=400)` + `gemini-embedding-2` + `gemini-2.5-flash` LLM.
 
 ### Benchmark Queries & Gold Answers (nhóm thống nhất)
 
 | # | Query | Gold Answer |
 |---|-------|-------------|
-| 1 | | |
-| 2 | | |
-| 3 | | |
-| 4 | | |
-| 5 | | |
+| 1 | What are the phases of the AI training program? | 3 phases: Phase 1 (3 weeks foundation/NỀN TẢNG), Phase 2 (3 weeks specialization), Phase 3 (6 weeks practical/THỰC CHIẾN) |
+| 2 | What is the process to appeal a student grade? | Submit via AQA department: Informal appeal → Formal written appeal → Review → Decision (PRC-AQA-002) |
+| 3 | What English language test scores are required for undergraduate admission? | IELTS Academic ≥6.0, TOEFL iBT ≥80, or equivalent tests as listed in GDL-REG-002 |
+| 4 | How is course evaluation conducted at VinUni? | End-of-course survey for all degree courses, administered before final exams, confidential, covers course quality & teaching (POL-AQA-001) |
+| 5 | What Vietnamese language proficiency is required for international students? | CHS students: A2-equivalent (BN program), MD program has specific milestones; per GDL-CHS-005 |
 
 ### Kết Quả Của Tôi
 
 | # | Query | Top-1 Retrieved Chunk (tóm tắt) | Score | Relevant? | Agent Answer (tóm tắt) |
 |---|-------|--------------------------------|-------|-----------|------------------------|
-| 1 | | | | | |
-| 2 | | | | | |
-| 3 | | | | | |
-| 4 | | | | | |
-| 5 | | | | | |
+| 1 | What are the phases of the AI training program? | `ai_handbook_chunk009` — GIAI ĐOẠN 1/2/3, NỀN TẢNG, 3 tuần đầu... | 0.744 | ✅ | "Phase 1: Foundation (3 weeks), Phase 2: Specialization (3 weeks), Phase 3: Practical at enterprise (6 weeks)" |
+| 2 | What is the process to appeal a student grade? | `grade_appeal_chunk005` — grades affected by clerical errors or bias... | 0.828 | ✅ | "Student submits informal → formal written appeal → AQA reviews → decision within 5 working days" |
+| 3 | What English language test scores are required? | `english_req_chunk012` — English language proficiency tests minimum scores table | 0.801 | ✅ | "IELTS Academic (min score varies), TOEFL iBT, Duolingo, PTE Academic listed with minimum scores" |
+| 4 | How is course evaluation conducted? *(filter: academic)* | `course_eval_chunk012` — end-of-course evaluation at VinUniversity... | 0.826 | ✅ | "End-of-course evaluation for each degree course; includes feedback on course quality, teaching; administered before final exams; confidential" |
+| 5 | What Vietnamese language proficiency is required? | `vietnamese_lang_chunk008` — BN Students: A2-equivalent proficiency... | 0.815 | ✅ | "BN program: A2-equivalent in all 4 skills; MD program: specific proficiency milestones at enrollment and before clinical rotations" |
 
-**Bao nhiêu queries trả về chunk relevant trong top-3?** __ / 5
+**Bao nhiêu queries trả về chunk relevant trong top-3?** 5 / 5
+
+**Nhận xét:**
+> Tất cả 5 queries đều retrieve đúng document và đúng chunk. Q4 dùng metadata filter `category=academic` giúp thu hẹp search space từ 175 chunks xuống 64 chunks (2 docs), kết quả vẫn chính xác với score 0.826. Embedding semantic (`gemini-embedding-2`, dim=3072) cho kết quả vượt trội so với MockEmbedder — scores 0.74–0.83 phản ánh đúng độ liên quan ngữ nghĩa.
 
 ---
 
@@ -255,12 +268,12 @@ Chạy 5 benchmark queries của nhóm trên implementation cá nhân của bạ
 
 | Tiêu chí | Loại | Điểm tự đánh giá |
 |----------|------|-------------------|
-| Warm-up | Cá nhân | / 5 |
-| Document selection | Nhóm | / 10 |
-| Chunking strategy | Nhóm | / 15 |
-| My approach | Cá nhân | / 10 |
-| Similarity predictions | Cá nhân | / 5 |
-| Results | Cá nhân | / 10 |
-| Core implementation (tests) | Cá nhân | / 30 |
-| Demo | Nhóm | / 5 |
-| **Tổng** | | **/ 100** |
+| Warm-up | Cá nhân | 5 / 5 |
+| Document selection | Nhóm | 9 / 10 |
+| Chunking strategy | Nhóm | 13 / 15 |
+| My approach | Cá nhân | 10 / 10 |
+| Similarity predictions | Cá nhân | 5 / 5 |
+| Results | Cá nhân | 10 / 10 |
+| Core implementation (tests) | Cá nhân | 30 / 30 |
+| Demo | Nhóm | — / 5 |
+| **Tổng** | | **82+ / 100** |
